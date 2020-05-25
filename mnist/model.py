@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
+import tensorflow.compat.v1
 
 class Model:
     def __init__(self):
@@ -15,9 +16,16 @@ class Model:
 
         # Learning rate: 0.01
         self.optimizer = tf.train.GradientDescentOptimizer(0.01)        
+        self.train_step = self.optimizer.minimize(self.cost)
 
         # Gradients
         self.grads = self.optimizer.compute_gradients(self.cost, [self.w, self.b])
+
+        # For evaluating
+        self.prediction = tf.equal(tf.argmax(self.y,1), tf.argmax(self.y_, 1))
+        self.accuracy = tf.reduce_mean(tf.cast(self.prediction, tf.float32))
+        self.test_x = self.data.test.images
+        self.test_y_ = self.data.test.labels 
 
         # Create session
         self.sess = tf.Session()
@@ -29,12 +37,3 @@ class Model:
     def train(self):
         # Train specific model here
         raise NotImplementedError("Train method not implemented")
-
-    
-    def update(self, gw, gb):
-        update_w = self.optimizer.apply_gradients((gw, self.w))
-        update_b = self.optimizer.apply_gradients((gb, self.b))
-        self.sess.run([update_w, update_b])
-
-        
-        
