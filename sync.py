@@ -1,5 +1,7 @@
 from mnist import Model
 from mpi4py import MPI
+import numpy as np
+import tensorflow as tf
 
 class Sync(Model):
     def __init__(self, comm, rank, training_time, batch_size):
@@ -53,14 +55,13 @@ class Sync(Model):
 
           
             # Receive data from parameter server
-            # Need synchronization
-            comm.barrier()
             bcast_data = comm.bcast(bcast_data, root=0) 
             
             # Update variables
             if self.rank != 0:
-                self.w = bcast_data['w']
-                self.b = bcast_data['b']
+                w = tf.assign(self.w, bcast_data['w'])
+                b = tf.assign(self.b, bcast_data['b'])
+                self.sess.run([w, b])
 
         # Evaluate model
         if self.rank == 0:
