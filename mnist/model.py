@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
-import tensorflow.compat.v1
+import numpy as np
 
 class Model:
     def __init__(self):
@@ -20,6 +20,14 @@ class Model:
 
         # Gradients
         self.grads = self.optimizer.compute_gradients(self.cost, [self.w, self.b])
+        self.d1_gw = np.empty((784, 10), dtype=np.float32) 
+        self.d1_gb = np.empty(10, dtype=np.float32) 
+        self.d2_gw = np.empty((784, 10), dtype=np.float32) 
+        self.d2_gb = np.empty(10, dtype=np.float32) 
+
+        # Broadcasting values
+        self.bcast_gw = np.empty((784, 10), dtype=np.float32)
+        self.bcast_gb = np.empty(10, dtype=np.float32)
 
         # For evaluating
         self.prediction = tf.equal(tf.argmax(self.y,1), tf.argmax(self.y_, 1))
