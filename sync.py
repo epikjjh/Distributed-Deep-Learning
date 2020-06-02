@@ -22,17 +22,32 @@ class Sync(Model):
             # Parameter Server
             if self.rank == 0:
                 # Receive data from workers
-                data1 = comm.recv(source=1)
-                data2 = comm.recv(source=2)
+                '''
+                    Shape
+                        gw: (784,10)
+                        gb: (10,)
+                '''
+                d1_gw = np.empty((784, 10), dtype=np.float32) 
+                d1_gb = np.empty(10, dtype=np.float32) 
+                d2_gw = np.empty((784, 10), dtype=np.float32) 
+                d2_gb = np.empty(10, dtype=np.float32) 
+                # From worker1
+                comm.Recv([d1_gw, MPI.DOUBLE], source=1, tag=1)
+                comm.Recv([d1_gb, MPI.DOUBLE], source=1, tag=2)
+                # From worker2
+                comm.Recv(d2_gw, source=2, tag=1)
+                comm.Recv(d2_gb, source=2, tag=2)
 
                 # Apply gradients 
-                gw = data1['gw'] + data2['gw']
-                gb = data1['gb'] + data2['gb']
+                gw = d1_gw + d2_gw
+                gb = d1_gb + d2_gb
                 apply_gradients = self.optimizer.apply_gradients(((gw, self.w), (gb, self.b)))
                 self.sess.run(apply_gradients)
 
                 # Broadcast gradients
-                bcast_data = {'w': self.w.eval(session=self.sess), 'b': self.b.eval(session=self.sess)}
+                bcast_gw = self.w.eval(session=self.sess)
+                bcast_gb = self.b.eval(session=self.sess)
+
             # Worker 
             else:
                 x_batch, y_batch = self.data.train.next_batch(self.batch_size)
@@ -44,23 +59,26 @@ class Sync(Model):
 
                 # Tuple: (gradient, variable)
                 # Pack gradeint values 
-                # Data: {'gw': gw, 'gb': gb}
-                send_data = {'gw': grads[0], 'gb': grads[1]}
+                # Data: [gw, gb]
+                
                 
                 # Send data to parameter server
-                comm.send(send_data, dest=0)
+                comm.Send([grads[0], MPI.DOUBLE], dest=0, tag=1)
+                comm.Send([grads[1], MPI.DOUBLE], dest=0, tag=2)
                 
                 # Set broadcasted data 
-                bcast_data = {'w': None, 'b': None}
+                bcast_gw = np.empty((784, 10), dtype=np.float32)
+                bcast_gb = np.empty(10, dtype=np.float32)
 
           
             # Receive data from parameter server
-            bcast_data = comm.bcast(bcast_data, root=0) 
+            comm.Bcast([bcast_gw, MPI.DOUBLE], root=0) 
+            comm.Bcast([bcast_gb, MPI.DOUBLE], root=0) 
             
             # Update variables
             if self.rank != 0:
-                w = tf.assign(self.w, bcast_data['w'])
-                b = tf.assign(self.b, bcast_data['b'])
+                w = tf.assign(self.w, bcast_gw)
+                b = tf.assign(self.b, bcast_gb)
                 self.sess.run([w, b])
 
         # Evaluate model
