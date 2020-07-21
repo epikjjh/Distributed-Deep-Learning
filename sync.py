@@ -6,7 +6,7 @@ import tensorflow as tf
 import time
 
 class SyncWorker(Model):
-    def __init__(self, comm, rank, training_time, batch_size):
+    def __init__(self, comm, rank, batch_size):
         super().__init__()
         
         self.comm = comm
@@ -15,11 +15,10 @@ class SyncWorker(Model):
         # Rank 1,2: worker 
         self.rank = rank
         
-        self.training_time = training_time
         self.batch_size = batch_size
 
 
-    def worker(self) -> List:
+    def work(self) -> List:
         x_batch, y_batch = self.data.train.next_batch(self.batch_size)
         # Compute gradient values
         ret, = self.sess.run([self.grads], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
@@ -31,30 +30,19 @@ class SyncWorker(Model):
         # Pack gradeint values 
         # Data: [gw_conv1, gb_conv1, gw_conv2, gb_conv2, gw_fc1, gb_fc1, gw_fc2, gb_fc2]
         # Send data to parameter server
-        comm.Send([grads[0], MPI.DOUBLE], dest=0, tag=1)
-        comm.Send([grads[1], MPI.DOUBLE], dest=0, tag=2)
-        comm.Send([grads[2], MPI.DOUBLE], dest=0, tag=3)
-        comm.Send([grads[3], MPI.DOUBLE], dest=0, tag=4)
-        comm.Send([grads[4], MPI.DOUBLE], dest=0, tag=5)
-        comm.Send([grads[5], MPI.DOUBLE], dest=0, tag=6)
-        comm.Send([grads[6], MPI.DOUBLE], dest=0, tag=7)
-        comm.Send([grads[7], MPI.DOUBLE], dest=0, tag=8)
-        return list()
-
+		return grads
 
 
 class ParameterServer():
-    def __init__(self, comm, rank, training_time, batch_size):
+    def __init__(self, comm, rank):
         self.comm = comm
 
         # Rank 0: parameter server
         # Rank 1,2: worker 
         self.rank = rank
-        
-        self.training_time = training_time
-        self.batch_size = batch_size
 
-    def sync(self):
+
+    def sync(self) -> List:
         # Receive data from workers
         # From worker1
         comm.Recv([self.d1_conv1_gw, MPI.DOUBLE], source=1, tag=1)
@@ -91,6 +79,7 @@ class ParameterServer():
             (fc1_gw, self.w_fc1), (fc1_gb, self.b_fc1),
             (fc2_gw, self.w_fc2), (fc2_gb, self.b_fc2),
         ))
+		## May return apply gradients??
         self.sess.run(apply_gradients)
 
         # Broadcast variables
@@ -105,24 +94,36 @@ class ParameterServer():
         
 
 if __name__ == "__main__":
+	training_time = 2000
+	batch_size = 100
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank() 
-    sync_test = Sync(comm, rank, 2000, 100)
-    sync_test.train()
+	ps = ParameterServer(comm, rank) 
+	w1 = SyncWorker(comm, rank, batch_size)
+	w2 = SynccWorker(comm, rank, batch_size) 
         
     # Measure time
     if self.rank == 0:
         start = time.clock()
 
-    for step in range(self.training_time):
+    for step in range(training_time):
         # Parameter Server
-        if self.rank == 0:
-            self.parameter_server()
+        if rank == 0:
+            List = ps.sync()
 
         # Worker 
         else:
-            self.worker()
-      
+			List = w1.work()
+			List = w2.work()
+			comm.Send([grads[0], MPI.DOUBLE], dest=0, tag=1)
+			comm.Send([grads[1], MPI.DOUBLE], dest=0, tag=2)
+			comm.Send([grads[2], MPI.DOUBLE], dest=0, tag=3)
+			comm.Send([grads[3], MPI.DOUBLE], dest=0, tag=4)
+			comm.Send([grads[4], MPI.DOUBLE], dest=0, tag=5)
+			comm.Send([grads[5], MPI.DOUBLE], dest=0, tag=6)
+			comm.Send([grads[6], MPI.DOUBLE], dest=0, tag=7)
+			comm.Send([grads[7], MPI.DOUBLE], dest=0, tag=8)
+		  
         # Receive data from parameter server
         comm.Bcast([self.bcast_conv1_w, MPI.DOUBLE], root=0) 
         comm.Bcast([self.bcast_conv1_b, MPI.DOUBLE], root=0) 
