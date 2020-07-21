@@ -52,6 +52,7 @@ class SyncWorker(Model):
 class ParameterServer(Model):
     def __init__(self, comm, rank):
         self.comm = comm
+        super().__init__()
 
         # Rank 0: parameter server
         # Rank 1,2: worker 
@@ -114,13 +115,13 @@ class ParameterServer(Model):
         
 
 if __name__ == "__main__":
-    training_time = 20
+    training_time = 1
     batch_size = 100
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank() 
     ps = ParameterServer(comm, rank) 
     w1 = SyncWorker(comm, rank, batch_size)
-    w2 = SynccWorker(comm, rank, batch_size) 
+    w2 = SyncWorker(comm, rank, batch_size) 
 
     bcast_conv1_w = 0
     bcast_conv1_b = 0
@@ -138,7 +139,7 @@ if __name__ == "__main__":
     ]
         
     # Measure time
-    if self.rank == 0:
+    if rank == 0:
         start = time.clock()
 
     for step in range(training_time):
@@ -174,10 +175,10 @@ if __name__ == "__main__":
         comm.Bcast([vars[7], MPI.DOUBLE], root=0) 
         
         # Update variables (worker)
-        if self.rank == 1:
+        if rank == 1:
             w1.update(vars)
 
-        elif self.rank == 2:
+        elif rank == 2:
             w2.update(vars)
 
 
