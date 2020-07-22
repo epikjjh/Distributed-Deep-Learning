@@ -33,23 +33,16 @@ class SyncWorker(Model):
 
 
     def update(self, vars):
-            w_conv1 = tf.assign(self.w_conv1, vars[0])
-            b_conv1 = tf.assign(self.b_conv1, vars[1])
-            w_conv2 = tf.assign(self.w_conv2, vars[2])
-            b_conv2 = tf.assign(self.b_conv2, vars[3])
-            w_fc1 = tf.assign(self.w_fc1, vars[4])
-            b_fc1 = tf.assign(self.b_fc1, vars[5])
-            w_fc2 = tf.assign(self.w_fc2, vars[6])
-            b_fc2 = tf.assign(self.b_fc2, vars[7])
-            self.sess.run([
-                w_conv1, b_conv1,
-                w_conv2, b_conv2,
-                w_fc1, b_fc1,
-                w_fc2, b_fc2
-            ])
+            apply_gradients = self.optimizer.apply_gradients((
+                (vars[0], self.w_conv1), (vars[1], self.b_conv1),
+                (vars[2], self.w_conv2), (vars[3], self.b_conv2),
+                (vars[4], self.w_fc1), (vars[5], self.b_fc1),
+                (vars[6], self.w_fc2), (vars[7], self.b_fc2),
+            ))
+            self.sess.run(apply_gradients)
 
 
-class ParameterServer(Model):
+class ParameterServer():
     def __init__(self, comm, rank):
         self.comm = comm
 
@@ -89,29 +82,12 @@ class ParameterServer(Model):
         fc1_gb = self.d1_fc1_gb + self.d2_fc1_gb
         fc2_gw = self.d1_fc2_gw + self.d2_fc2_gw
         fc2_gb = self.d1_fc2_gb + self.d2_fc2_gb
-        apply_gradients = self.optimizer.apply_gradients((
-            (conv1_gw, self.w_conv1), (conv1_gb, self.b_conv1),
-            (conv2_gw, self.w_conv2), (conv2_gb, self.b_conv2),
-            (fc1_gw, self.w_fc1), (fc1_gb, self.b_fc1),
-            (fc2_gw, self.w_fc2), (fc2_gb, self.b_fc2),
-        ))
-        self.sess.run(apply_gradients)
-
-        # Broadcast variables
-        self.bcast_conv1_w = self.w_conv1.eval(session=self.sess)
-        self.bcast_conv1_b = self.b_conv1.eval(session=self.sess)
-        self.bcast_conv2_w = self.w_conv2.eval(session=self.sess)
-        self.bcast_conv2_b = self.b_conv2.eval(session=self.sess)
-        self.bcast_fc1_w = self.w_fc1.eval(session=self.sess)
-        self.bcast_fc1_b = self.b_fc1.eval(session=self.sess)
-        self.bcast_fc2_w = self.w_fc2.eval(session=self.sess)
-        self.bcast_fc2_b = self.b_fc2.eval(session=self.sess)
 
         return [
-            self.bcast_conv1_w, self.bcast_conv1_b, self.bcast_conv2_w, self.bcast_conv2_b,
-            self.bcast_fc1_w, self.bcast_fc1_b, self.bcast_fc2_w, self.bcast_fc2_b
+            conv1_gw, conv1_gb, conv2_gw, conv2_gb,
+            fc1_gw, fc1_gb, fc2_gw, fc2_gb
         ]
-        
+
 
 if __name__ == "__main__":
     training_time = 20
@@ -122,19 +98,19 @@ if __name__ == "__main__":
     w1 = SyncWorker(comm, rank, batch_size)
     w2 = SynccWorker(comm, rank, batch_size) 
 
-    bcast_conv1_w = 0
-    bcast_conv1_b = 0
-    bcast_conv2_w = 0
-    bcast_conv2_b = 0
-    bcast_fc1_w = 0
-    bcast_fc1_b = 0
-    bcast_fc2_w = 0
-    bcast_fc2_b = 0
+    conv1_gw = 0.0
+    conv1_gb = 0.0
+    conv2_gw = 0.0
+    conv2_gb = 0.0
+    fc1_gw = 0.0
+    fc1_gb = 0.0
+    fc2_gw = 0.0
+    fc2_gb = 0.0
 
     # Mapping variables
     vars = [
-        bcast_conv1_w, bcast_conv1_b, bcast_conv2_w, bcast_conv2_b,
-        bcast_fc1_w, bcast_fc1_b, bcast_fc2_w, bcast_fc2_b
+        conv1_gw, conv1_gb, conv2_gw, conv2_gb,
+        fc1_gw, fc1_gb, fc2_gw, fc2_gb
     ]
         
     # Measure time
@@ -182,9 +158,10 @@ if __name__ == "__main__":
 
 
     # Evaluate model
-    if self.rank == 0:
+    if self.rank != 0:
         end = time.clock()
-        print(self.sess.run(self.accuracy, feed_dict={self.x: self.test_x, self.y_: self.test_y_, self.keep_prob: 1.0}))
+        print(w1.sess.run(self.accuracy, feed_dict={w1.x: w1.test_x, w1.y_: w1.test_y_, w1.keep_prob: 1.0}))
+        print(w2.sess.run(self.accuracy, feed_dict={w2.x: w2.test_x, w2.y_: w2.test_y_, w2.keep_prob: 1.0}))
         print(end-start)
 
 
