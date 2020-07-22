@@ -45,7 +45,6 @@ class SyncWorker(Model):
 class ParameterServer():
     def __init__(self, comm, rank):
         self.comm = comm
-        super().__init__()
 
         # Rank 0: parameter server
         # Rank 1,2: worker 
