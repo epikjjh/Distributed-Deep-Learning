@@ -98,14 +98,15 @@ if __name__ == "__main__":
     w1 = SyncWorker(comm, rank, batch_size)
     w2 = SyncWorker(comm, rank, batch_size) 
 
-    conv1_gw = 0.0
-    conv1_gb = 0.0
-    conv2_gw = 0.0
-    conv2_gb = 0.0
-    fc1_gw = 0.0
-    fc1_gb = 0.0
-    fc2_gw = 0.0
-    fc2_gb = 0.0
+    conv1_gw = np.empty((5,5,1,32), dtype=np.float32)
+    conv1_gb = np.empty(32, dtype=np.float32)
+    conv2_gw = np.empty((5,5,32,64), dtype=np.float32)
+    conv2_gb = np.empty(64, dtype=np.float32)
+    fc1_gw = np.empty((7*7*64,1024), dtype=np.float32)
+    fc1_gb = np.empty(1024, dtype=np.float32)
+    fc2_gw = np.empty((1024,10), dtype=np.float32)
+    fc2_gb = np.empty(10, dtype=np.float32)
+
 
     # Mapping variables
     vars = [
@@ -114,7 +115,7 @@ if __name__ == "__main__":
     ]
         
     # Measure time
-    if rank == 0:
+    if rank != 0:
         start = time.clock()
 
     for step in range(training_time):
