@@ -1,21 +1,14 @@
-from typing import List
 from mnist import Model
 from mpi4py import MPI
+from typing import List
 import numpy as np
 import tensorflow as tf
 import time
 
 class SyncWorker(Model):
-    def __init__(self, comm, rank, batch_size):
+    def __init__(self, batch_size):
         super().__init__()
-        
-        self.comm = comm
-
-        # Rank 0: parameter server
-        # Rank 1,2: worker 
-        self.rank = rank
         self.batch_size = batch_size
-
 
     def work(self) -> List:
         x_batch, y_batch = self.data.train.next_batch(self.batch_size)
@@ -32,68 +25,88 @@ class SyncWorker(Model):
         return grads
 
 
-    def update(self, vars):
-            apply_gradients = self.optimizer.apply_gradients((
-                (vars[0], self.w_conv1), (vars[1], self.b_conv1),
-                (vars[2], self.w_conv2), (vars[3], self.b_conv2),
-                (vars[4], self.w_fc1), (vars[5], self.b_fc1),
-                (vars[6], self.w_fc2), (vars[7], self.b_fc2),
-            ))
-            self.sess.run(apply_gradients)
-
-
-class ParameterServer():
-    def __init__(self, comm, rank):
-        self.comm = comm
-
-        # Rank 0: parameter server
-        # Rank 1,2: worker 
-        self.rank = rank
-
-
-    def sync(self) -> List:
-        # Receive data from workers
-        # From worker1
-        comm.Recv([self.d1_conv1_gw, MPI.DOUBLE], source=1, tag=1)
-        comm.Recv([self.d1_conv1_gb, MPI.DOUBLE], source=1, tag=2)
-        comm.Recv([self.d1_conv2_gw, MPI.DOUBLE], source=1, tag=3)
-        comm.Recv([self.d1_conv2_gb, MPI.DOUBLE], source=1, tag=4)
-        comm.Recv([self.d1_fc1_gw, MPI.DOUBLE], source=1, tag=5)
-        comm.Recv([self.d1_fc1_gb, MPI.DOUBLE], source=1, tag=6)
-        comm.Recv([self.d1_fc2_gw, MPI.DOUBLE], source=1, tag=7)
-        comm.Recv([self.d1_fc2_gb, MPI.DOUBLE], source=1, tag=8)
-
-        # From worker2
-        comm.Recv([self.d2_conv1_gw, MPI.DOUBLE], source=2, tag=1)
-        comm.Recv([self.d2_conv1_gb, MPI.DOUBLE], source=2, tag=2)
-        comm.Recv([self.d2_conv2_gw, MPI.DOUBLE], source=2, tag=3)
-        comm.Recv([self.d2_conv2_gb, MPI.DOUBLE], source=2, tag=4)
-        comm.Recv([self.d2_fc1_gw, MPI.DOUBLE], source=2, tag=5)
-        comm.Recv([self.d2_fc1_gb, MPI.DOUBLE], source=2, tag=6)
-        comm.Recv([self.d2_fc2_gw, MPI.DOUBLE], source=2, tag=7)
-        comm.Recv([self.d2_fc2_gb, MPI.DOUBLE], source=2, tag=8)
-
-        # Apply gradients 
-        conv1_gw = self.d1_conv1_gw + self.d2_conv1_gw
-        conv1_gb = self.d1_conv1_gb + self.d2_conv1_gb
-        conv2_gw = self.d1_conv2_gw + self.d2_conv2_gw
-        conv2_gb = self.d1_conv2_gb + self.d2_conv2_gb
-        fc1_gw = self.d1_fc1_gw + self.d2_fc1_gw
-        fc1_gb = self.d1_fc1_gb + self.d2_fc1_gb
-        fc2_gw = self.d1_fc2_gw + self.d2_fc2_gw
-        fc2_gb = self.d1_fc2_gb + self.d2_fc2_gb
-
-        return [
-            conv1_gw, conv1_gb, conv2_gw, conv2_gb,
-            fc1_gw, fc1_gb, fc2_gw, fc2_gb
+class ParameterServer:
+    def __init__(self):
+        self.var_size = 8
+        self.var_shape = [
+            [5,5,1,32],
+            [32],
+            [5,5,32,64],
+            [64],
+            [7*7*64, 1024],
+            [1024],
+            [1024, 10],
+            [10]
         ]
+
+        # Data for worker
+        # For worker1
+        self.w1_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.var_size)]
+        # For worker2
+        self.w2_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.var_size)]
+    
+        # TF variables
+        self.var_bucket = [tf.get_variable("v{}".format(i), shape=self.var_shape[i], initializer=tf.random_normal_initializer(), dtype=tf.float32) for i in range(self.var_size)]
+
+        # Optimizer
+        self.optimizer = tf.train.AdamOptimizer(1e-4)
+
+        # Apply gradients
+        self.grads_and_vars = [(self.w1_bucket[i]+self.w2_bucket[i], self.var_bucket[i]) for i in range(self.var_size)]
+        self.sync_gradients = self.optimizer.apply_gradients(self.grads_and_vars)
+        
+        # Create session
+        self.sess = tf.Session()
+        self.sess.run(tf.global_variables_initializer())
+
+    def update(self):
+        self.sess.run(self.sync_gradients)
 
 
 if __name__ == "__main__":
-    training_time = 1
+    epoch = 1
     batch_size = 100
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank() 
+    
+    # Worker1
+    if rank == 1:
+        w1 = SyncWorker(batch_size) 
+        for step in range(epoch):
+            grads_w1 = w1.work()
+            
+            # Send worker 1's grads
+            for i in range(w1.var_size):
+                comm.Send([grads_w1[i], MPI.DOUBLE], dest=0, tag=i+1)
+
+    # Worker2
+    elif rank == 2:
+        w2 = SyncWorker(batch_size) 
+        for step in range(epoch):
+            grads_w2 = w2.work()
+            
+            # Send worker 1's grads
+            for i in range(w2.var_size):
+                comm.Send([grads_w2[i], MPI.DOUBLE], dest=0, tag=i+1)
+
+    # Parameter Server
+    else:
+        ps = ParameterServer()
+        for step in range(epoch):
+            # Receive data from workers
+            # From worker1
+            for i in range(ps.var_size):
+                comm.Recv([ps.w1_bucket[i], MPI.DOUBLE], source=1, tag=i+1)
+
+            # From worker2
+            for i in range(ps.var_size):
+                comm.Recv([ps.w2_bucket[i], MPI.DOUBLE], source=2, tag=i+1)
+
+            # Synchronize
+            ps.update()
+
+
+    '''
     ps = ParameterServer(comm, rank) 
     w1 = SyncWorker(comm, rank, batch_size)
     w2 = SyncWorker(comm, rank, batch_size) 
@@ -164,5 +177,4 @@ if __name__ == "__main__":
         print(w1.sess.run(self.accuracy, feed_dict={w1.x: w1.test_x, w1.y_: w1.test_y_, w1.keep_prob: 1.0}))
         print(w2.sess.run(self.accuracy, feed_dict={w2.x: w2.test_x, w2.y_: w2.test_y_, w2.keep_prob: 1.0}))
         print(end-start)
-
-
+    '''
