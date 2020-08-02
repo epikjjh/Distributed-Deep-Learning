@@ -16,11 +16,6 @@ class SyncWorker(Model):
         ret, = self.sess.run([self.grads], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
         
         # ret -> ((gw, w), (gb, b))
-        #print(ret[-1])
-        '''
-        Problem: nan gradients
-        print(ret[-1])
-        '''
         grads = [grad for grad, var in ret]
 
         # Tuple: (gradient, variable)
