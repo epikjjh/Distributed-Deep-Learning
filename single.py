@@ -1,16 +1,14 @@
 from mnist import Model
 
 class Single(Model):
-    def __init__(self, training_time, batch_size):
+    def __init__(self, epoch, batch_size):
         super().__init__()
-        self.training_time = training_time
+        self.epoch = epoch
         self.batch_size = batch_size
-
-
 
     # Overriden method
     def train(self):
-        for step in range(self.training_time):
+        for step in range(self.epoch):
             x_batch, y_batch = self.data.train.next_batch(self.batch_size)
             self.sess.run(self.train_step, feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
 
@@ -19,5 +17,5 @@ class Single(Model):
 
 
 if __name__ == "__main__":
-    single_test = Single(2000, 100)
+    single_test = Single(500, 50)
     single_test.train()
