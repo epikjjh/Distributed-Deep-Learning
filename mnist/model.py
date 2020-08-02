@@ -85,5 +85,3 @@ class Model:
 
             # Initialize variables
             self.sess.run(tf.compat.v1.global_variables_initializer())
-
-            

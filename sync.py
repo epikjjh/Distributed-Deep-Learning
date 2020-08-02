@@ -11,24 +11,23 @@ class SyncWorker(Model):
         self.batch_size = batch_size
 
     def work(self) -> List:
-        with tf.compat.v1.variable_scope("mnist", reuse=tf.compat.v1.AUTO_REUSE):
-            x_batch, y_batch = self.data.train.next_batch(self.batch_size)
-            # Compute gradient values
-            ret, = self.sess.run([self.grads], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
-            
-            # ret -> ((gw, w), (gb, b))
-            #print(ret[-1])
-            '''
-            Problem: nan gradients
-            print(ret[-1])
-            '''
-            grads = [grad for grad, var in ret]
+        x_batch, y_batch = self.data.train.next_batch(self.batch_size)
+        # Compute gradient values
+        ret, = self.sess.run([self.grads], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
+        
+        # ret -> ((gw, w), (gb, b))
+        #print(ret[-1])
+        '''
+        Problem: nan gradients
+        print(ret[-1])
+        '''
+        grads = [grad for grad, var in ret]
 
-            # Tuple: (gradient, variable)
-            # Pack gradeint values 
-            # Data: [gw_conv1, gb_conv1, gw_conv2, gb_conv2, gw_fc1, gb_fc1, gw_fc2, gb_fc2]
-            # Send data to parameter server
-            return grads
+        # Tuple: (gradient, variable)
+        # Pack gradeint values 
+        # Data: [gw_conv1, gb_conv1, gw_conv2, gb_conv2, gw_fc1, gb_fc1, gw_fc2, gb_fc2]
+        # Send data to parameter server
+        return grads
 
 
 class ParameterServer:
@@ -59,29 +58,30 @@ class ParameterServer:
         with tf.compat.v1.variable_scope("ParameterServer", reuse=tf.compat.v1.AUTO_REUSE):
             self.var_bucket = [tf.compat.v1.get_variable("v{}".format(i), shape=self.var_shape[i], dtype=tf.float32) for i in range(self.var_size)]
 
-            # Optimizer
-            self.optimizer = tf.compat.v1.train.AdamOptimizer(1e-4)
+        # Optimizer
+        self.optimizer = tf.compat.v1.train.AdamOptimizer(1e-4)
 
-            # Apply gradients
-            # Tuple: (gradient, variable)
-            # Pack gradeint values 
-            self.grads_and_vars = [(self.w_bucket[i], self.var_bucket[i]) for i in range(self.var_size)]
-            self.sync_gradients = self.optimizer.apply_gradients(self.grads_and_vars)
+        # Apply gradients
+        # Tuple: (gradient, variable)
+        # Pack gradeint values 
+        self.grads_and_vars = [(self.w_bucket[i], self.var_bucket[i]) for i in range(self.var_size)]
+        self.sync_gradients = self.optimizer.apply_gradients(self.grads_and_vars)
             
-            # Create session
-            self.sess = tf.compat.v1.Session()
-            self.sess.run(tf.compat.v1.global_variables_initializer())
+        # Create session
+        self.sess = tf.compat.v1.Session()
+        self.sess.run(tf.compat.v1.global_variables_initializer())
 
     def update(self):
         for i in range(self.var_size):
             self.w_bucket[i] = self.w1_bucket[i] + self.w2_bucket[i]
 
-        with tf.compat.v1.variable_scope("ParameterServer", reuse=tf.compat.v1.AUTO_REUSE):
-            self.sess.run(self.sync_gradients)
+        # Update grads_and_vars -> ndarray not mutable?
+        self.grads_and_vars = [(self.w_bucket[i], self.var_bucket[i]) for i in range(self.var_size)]
+        self.sess.run(self.sync_gradients)
 
 
 if __name__ == "__main__":
-    epoch = 500
+    epoch = 5
     batch_size = 50
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank() 
@@ -100,11 +100,6 @@ if __name__ == "__main__":
 
             for step in range(epoch):
                 grads_w1 = w1.work()
-                '''
-                Problem: nan
-                print(grads_w2)
-                '''
-
                 # Send worker 1's grads
                 for i in range(w1.var_size):
                     comm.Send([grads_w1[i], MPI.DOUBLE], dest=0, tag=i+1)
@@ -135,10 +130,6 @@ if __name__ == "__main__":
 
             for step in range(epoch):
                 grads_w2 = w2.work()
-                '''
-                Problem: nan
-                print(grads_w2)
-                '''
                 
                 # Send worker 1's grads
                 for i in range(w2.var_size):
@@ -171,26 +162,13 @@ if __name__ == "__main__":
             for i in range(ps.var_size):
                 comm.Recv([ps.w2_bucket[i], MPI.DOUBLE], source=2, tag=i+1)
 
-            '''
-            Problem: nan
-            print(ps.w1_bucket)
-            print(ps.w2_bucket)
-            '''
-
             # Synchronize
             ps.update()
 
+            # Broadcast values
+            for i in range(ps.var_size):
+                bucket[i] = ps.var_bucket[i].eval(session=ps.sess)
 
-            with tf.compat.v1.variable_scope("ParameterServer", reuse=tf.compat.v1.AUTO_REUSE):
-                # Broadcast values
-                for i in range(ps.var_size):
-                    bucket[i] = ps.var_bucket[i].eval(session=ps.sess)
-                    '''
-                    Problem: same values
-                    if i==7:
-                        print(bucket[i])
-                        print("_____________________________________________________")
-                    '''
-                # send to worker 1, 2
+            # send to worker 1, 2
             for i in range(ps.var_size):
                 comm.Bcast([bucket[i], MPI.DOUBLE], root=0) 
