@@ -70,13 +70,12 @@ class ParameterServer:
         for i in range(self.var_size):
             self.w_bucket[i] = self.w1_bucket[i] + self.w2_bucket[i]
 
-        # Update grads_and_vars -> ndarray not mutable?
         self.grads_and_vars = [(self.w_bucket[i], self.var_bucket[i]) for i in range(self.var_size)]
         self.sess.run(self.sync_gradients)
 
 
 if __name__ == "__main__":
-    epoch = 500
+    epoch = 10
     batch_size = 50
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank() 
@@ -102,8 +101,11 @@ if __name__ == "__main__":
                 # Receive data from parameter server
                 for i in range(w1.var_size):
                     comm.Bcast([bucket[i], MPI.FLOAT], root=0) 
-
                 # Assign broadcasted values
+
+                # Problem section: duplicate tensor graph
+                bucket_assign = [tf.compat.v1.assign(var_bucket[i], bucket[i]) for i in range(w1.var_size)]
+
                 w1.sess.run(bucket_assign)
             
             end = time.clock()
@@ -135,6 +137,10 @@ if __name__ == "__main__":
                     comm.Bcast([bucket[i], MPI.FLOAT], root=0) 
 
                 # Assign broadcasted values
+
+                # Problem section: duplicate tensor graph
+                bucket_assign = [tf.compat.v1.assign(var_bucket[i], bucket[i]) for i in range(w2.var_size)]
+
                 w2.sess.run(bucket_assign)
 
             end = time.clock()
