@@ -76,7 +76,7 @@ class ParameterServer:
 
 
 if __name__ == "__main__":
-    epoch = 5
+    epoch = 500
     batch_size = 50
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank() 
@@ -97,11 +97,11 @@ if __name__ == "__main__":
                 grads_w1 = w1.work()
                 # Send worker 1's grads
                 for i in range(w1.var_size):
-                    comm.Send([grads_w1[i], MPI.DOUBLE], dest=0, tag=i+1)
+                    comm.Send([grads_w1[i], MPI.FLOAT], dest=0, tag=i+1)
 
                 # Receive data from parameter server
                 for i in range(w1.var_size):
-                    comm.Bcast([bucket[i], MPI.DOUBLE], root=0) 
+                    comm.Bcast([bucket[i], MPI.FLOAT], root=0) 
 
                 # Assign broadcasted values
                 w1.sess.run(bucket_assign)
@@ -128,11 +128,11 @@ if __name__ == "__main__":
                 
                 # Send worker 1's grads
                 for i in range(w2.var_size):
-                    comm.Send([grads_w2[i], MPI.DOUBLE], dest=0, tag=i+1)
+                    comm.Send([grads_w2[i], MPI.FLOAT], dest=0, tag=i+1)
 
                 # Receive data from parameter server
                 for i in range(w2.var_size):
-                    comm.Bcast([bucket[i], MPI.DOUBLE], root=0) 
+                    comm.Bcast([bucket[i], MPI.FLOAT], root=0) 
 
                 # Assign broadcasted values
                 w2.sess.run(bucket_assign)
@@ -151,11 +151,11 @@ if __name__ == "__main__":
             # Receive data from workers
             # From worker1
             for i in range(ps.var_size):
-                comm.Recv([ps.w1_bucket[i], MPI.DOUBLE], source=1, tag=i+1)
+                comm.Recv([ps.w1_bucket[i], MPI.FLOAT], source=1, tag=i+1)
 
             # From worker2
             for i in range(ps.var_size):
-                comm.Recv([ps.w2_bucket[i], MPI.DOUBLE], source=2, tag=i+1)
+                comm.Recv([ps.w2_bucket[i], MPI.FLOAT], source=2, tag=i+1)
 
             # Synchronize
             ps.update()
@@ -166,4 +166,4 @@ if __name__ == "__main__":
 
             # send to worker 1, 2
             for i in range(ps.var_size):
-                comm.Bcast([bucket[i], MPI.DOUBLE], root=0) 
+                comm.Bcast([bucket[i], MPI.FLOAT], root=0) 
