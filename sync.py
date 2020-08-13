@@ -86,8 +86,9 @@ if __name__ == "__main__":
 
         w1 = SyncWorker(batch_size) 
         # For broadcasting 
-        bucket = [np.empty(w1.var_shape[i], dtype=np.float32) for i in range(w1.var_size)]
-
+        bucket = [tf.placeholder(tf.float32, shape = w1.var_shape[i]) for i in range(w1.var_size)]
+        recv = [np.empty(w1.var_shape[i], dtype=np.float32) for i in range(w1.var_size)]
+        
         with tf.compat.v1.variable_scope("mnist", reuse=tf.compat.v1.AUTO_REUSE):
             var_bucket = [tf.compat.v1.get_variable("v{}".format(i), shape=w1.var_shape[i], dtype=tf.float32) for i in range(w1.var_size)]
             bucket_assign = [tf.compat.v1.assign(var_bucket[i], bucket[i]) for i in range(w1.var_size)]
@@ -104,9 +105,12 @@ if __name__ == "__main__":
                 # Assign broadcasted values
 
                 # Problem section: duplicate tensor graph
-                bucket_assign = [tf.compat.v1.assign(var_bucket[i], bucket[i]) for i in range(w1.var_size)]
-
-                w1.sess.run(bucket_assign)
+                #bucket_assign = [tf.compat.v1.assign(var_bucket[i], bucket[i]) for i in range(w1.var_size)]
+                #w1.sess.run(bucket_assign)
+                feed_dict = {}
+                for i in range(w1.var_size):
+                    feed_dict[bucket[i]] = recv[i]
+                w1.sess.run(bucket_assign, feed_dict = feed_dict)
             
             end = time.clock()
             print("Worker{} Accuracy: {}".format(rank,w1.sess.run(w1.accuracy, feed_dict={w1.x: w1.test_x, w1.y_: w1.test_y_, w1.keep_prob: 1.0})))
@@ -119,8 +123,9 @@ if __name__ == "__main__":
 
         w2 = SyncWorker(batch_size) 
         # For broadcasting 
-        bucket = [np.empty(w2.var_shape[i], dtype=np.float32) for i in range(w2.var_size)]
-
+        bucket = [tf.placeholder(tf.float32, shape = w2.var_shape[i]) for i in range(w2.var_size)]
+        recv = [np.empty(w2.var_shape[i], dtype=np.float32) for i in range(w2.var_size)]
+        
         with tf.compat.v1.variable_scope("mnist", reuse=tf.compat.v1.AUTO_REUSE):
             var_bucket = [tf.compat.v1.get_variable("v{}".format(i), shape=w2.var_shape[i], dtype=tf.float32) for i in range(w2.var_size)]
             bucket_assign = [tf.compat.v1.assign(var_bucket[i], bucket[i]) for i in range(w2.var_size)]
@@ -139,9 +144,12 @@ if __name__ == "__main__":
                 # Assign broadcasted values
 
                 # Problem section: duplicate tensor graph
-                bucket_assign = [tf.compat.v1.assign(var_bucket[i], bucket[i]) for i in range(w2.var_size)]
-
-                w2.sess.run(bucket_assign)
+                #bucket_assign = [tf.compat.v1.assign(var_bucket[i], bucket[i]) for i in range(w2.var_size)]
+                #w2.sess.run(bucket_assign)
+                feed_dict = {}
+                for i in range(w2.var_size):
+                    feed_dict[bucket[i]] = recv[i]
+                w2.sess.run(bucket_assign, feed_dict = feed_dict)
 
             end = time.clock()
             print("Worker{} Accuracy: {}".format(rank,w2.sess.run(w2.accuracy, feed_dict={w2.x: w2.test_x, w2.y_: w2.test_y_, w2.keep_prob: 1.0})))
@@ -152,7 +160,7 @@ if __name__ == "__main__":
         ps = ParameterServer()
         # For broadcasting 
         bucket = [np.empty(ps.var_shape[i], dtype=np.float32) for i in range(ps.var_size)]
-
+        recv = [np.empty(ps.var_shape[i], dtype=np.float32) for i in range(ps.var_size)]
         for step in range(epoch):
             # Receive data from workers
             # From worker1
@@ -168,8 +176,9 @@ if __name__ == "__main__":
 
             # Broadcast values
             for i in range(ps.var_size):
-                bucket[i] = ps.var_bucket[i].eval(session=ps.sess)
-
+                #bucket[i] = ps.var_bucket[i].eval(session=ps.sess)
+                recv[i] = ps.var_bucket[i].eval(session=ps.sess)
             # send to worker 1, 2
             for i in range(ps.var_size):
-                comm.Bcast([bucket[i], MPI.FLOAT], root=0) 
+                #comm.Bcast([bucket[i], MPI.FLOAT], root=0)
+                comm.Bcast([recv[i], MPI.FLOAT], root=0)
