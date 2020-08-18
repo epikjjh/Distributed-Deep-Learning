@@ -1,11 +1,19 @@
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist import input_data
+import pickle
 import numpy as np
+import pandas as pd
 
 class Model:
     def __init__(self):
         # Data: mnist dataset
-        self.data = input_data.read_data_sets("MNIST_data/", one_hot=True)
+        with open('data/mnist.pkl', 'rb') as f:
+            train_set, _, test_set = pickle.load(f, encoding='latin1')
+
+        self.x_train, y_train = train_set
+        self.x_test, y_test = test_set
+
+        self.y_train = pd.get_dummies(y_train)
+        self.y_test = pd.get_dummies(y_test)
         
         # CNN model
         with tf.compat.v1.variable_scope("mnist", reuse=tf.compat.v1.AUTO_REUSE):
@@ -57,18 +65,9 @@ class Model:
             self.optimizer = tf.compat.v1.train.AdamOptimizer(1e-4)
         
             # Variables
-            self.var_size = 8
-            self.var_shape = [
-                [5,5,1,32],
-                [32],
-                [5,5,32,64],
-                [64],
-                [7*7*64, 1024],
-                [1024],
-                [1024, 10],
-                [10]
-            ]
-            self.var_bucket = [tf.compat.v1.get_variable("v{}".format(i), shape=self.var_shape[i], dtype=tf.float32) for i in range(self.var_size)] 
+            self.var_bucket = tf.compat.v1.trainable_variables()
+            self.var_size = len(self.var_bucket)
+            self.var_shape = [var.shape for var in self.var_bucket]
 
             # Gradients
             self.grads = self.optimizer.compute_gradients(self.cost, self.var_bucket)
@@ -76,8 +75,6 @@ class Model:
             # For evaluating
             self.prediction = tf.equal(tf.argmax(self.y,1), tf.argmax(self.y_, 1))
             self.accuracy = tf.reduce_mean(tf.cast(self.prediction, tf.float32))
-            self.test_x = self.data.test.images
-            self.test_y_ = self.data.test.labels
             self.train_step = self.optimizer.minimize(self.cost)
             
             # Create session
