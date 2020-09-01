@@ -9,23 +9,29 @@ class SyncWorker(Model):
     def __init__(self, batch_size):
         super().__init__()
         self.batch_size = batch_size
+        self.send_func = self.wrap_send() 
+        self.sender = tf.py_function(func=self.send_func, inp=self.grads, Tout=[])
 
-    def work(self, cnt) -> List:
+    def wrap_send(self):
+        # Get multiple arguments
+        def send(*grads_and_vars):
+            # grads_and_vars -> ((gw, w), (gb, b))
+            # Tuple: (gradient, variable)
+            # Pack gradeint values 
+            grads = [grad for grad, var in grads_and_vars]
+
+            # Send data to parameter server
+            for i in range(self.var_size):
+                comm.Send([grads[i], MPI.FLOAT], dest=0, tag=i+1)
+
+            return None
+
+        return send
+
+    def work(self, cnt):
         x_batch = self.x_train[self.batch_size*cnt:self.batch_size*(cnt+1)]
         y_batch = self.y_train[self.batch_size*cnt:self.batch_size*(cnt+1)]
-
-        # Compute gradient values
-        ret, = self.sess.run([self.grads], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
-        
-        var = [var for grad, var in ret]
-
-        # ret -> ((gw, w), (gb, b))
-        grads = [grad for grad, var in ret]
-        # Tuple: (gradient, variable)
-        # Pack gradeint values 
-        # Data: [gw_conv1, gb_conv1, gw_conv2, gb_conv2, gw_fc1, gb_fc1, gw_fc2, gb_fc2]
-        # Send data to parameter server
-        return grads
+        self.sess.run([self.sender], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
 
 
 if __name__ == "__main__":
@@ -51,14 +57,13 @@ if __name__ == "__main__":
     for step in range(epoch):
         batch_num = int(worker.x_train.shape[0]/batch_size)
         for batch_cnt in range(batch_num):
-            grads = worker.work(batch_cnt)
-            # Send worker 1's grads
-            for i in range(worker.var_size):
-                comm.Send([grads[i], MPI.FLOAT], dest=0, tag=i+1)
+            # Calculate gradients then send them to parameter server
+            worker.work(batch_cnt)
 
             # Receive data from parameter server
             for i in range(worker.var_size):
                 comm.Bcast([bucket[i], MPI.FLOAT], root=0) 
+
             # Assign broadcasted values
             worker.sess.run(bucket_assign, feed_dict={ph_bucket[i]:bucket[i] for i in range(worker.var_size)})
             if batch_cnt % 10 == 0:
