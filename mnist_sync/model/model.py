@@ -6,10 +6,9 @@ import pandas as pd
 class Model:
     def __init__(self):
         # Data: mnist dataset
-        urllib.request.urlretrieve("http://deeplearning.net/data/mnist/mnist.pkl.gz", "mnist.pkl.gz")
-        with gzip.open('mnist.pkl.gz', 'rb') as f:
+        with open('data/mnist.pkl', 'rb') as f:
             train_set, _, test_set = pickle.load(f, encoding='latin1')
-
+        
         self.x_train, y_train = train_set
         self.x_test, y_test = test_set
 
