@@ -2,13 +2,11 @@ import tensorflow as tf
 import pickle
 import numpy as np
 import pandas as pd
-
 class Model:
     def __init__(self):
         # Data: mnist dataset
         with open('data/mnist.pkl', 'rb') as f:
             train_set, _, test_set = pickle.load(f, encoding='latin1')
-
         self.x_train, y_train = train_set
         self.x_test, y_test = test_set
 

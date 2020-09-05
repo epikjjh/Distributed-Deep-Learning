@@ -44,10 +44,10 @@ if __name__ == "__main__":
     epoch = 1
     batch_size = 100
     comm = MPI.COMM_WORLD
-    num_workers = comm.Get_size()-1
+    argv = comm.recv(source=1, tag=0)
+    num_workers = int(argv)
     # Receive parameters from worker
     params = comm.recv(source=1, tag=0)
-
     ps = ParameterServer(params)
     # For broadcasting 
     bucket = [np.empty(ps.var_shape[i], dtype=np.float32) for i in range(ps.var_size)]
