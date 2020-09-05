@@ -9,9 +9,9 @@ class ParameterServer:
         self.var_shape = params["shape"]
         self.total_batch = params["total_batch"]
 
-        # Data for workers
+        # Data for worker
         self.big_bucket = [np.empty(self.var_shape[i%self.var_size], dtype=np.float32) for i in range(self.var_size*num_workers)]
-        # For workers
+        # For worker1 + worker2
         self.w_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.var_size)]
         self.ph_bucket = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.var_size)]
     
@@ -35,7 +35,6 @@ class ParameterServer:
     def update(self):
         for i in range(self.var_size*num_workers):
             self.big_bucket[i%self.var_size] += self.big_bucket[i]
-        
         for i in range(self.var_size):
             self.w_bucket[i] = self.big_bucket[i]
         self.sess.run(self.sync_gradients, feed_dict={self.ph_bucket[i]:self.w_bucket[i] for i in range(self.var_size)})
@@ -61,7 +60,6 @@ if __name__ == "__main__":
             for i in range(num_workers):
                 for j in range(ps.var_size):
                     comm.Recv([ps.big_bucket[(i*ps.var_size)+j], MPI.FLOAT], source=i+1, tag=j+1)
-                           
             # Synchronize
             ps.update()
 
@@ -72,5 +70,3 @@ if __name__ == "__main__":
             # send to worker 1, 2
             for i in range(ps.var_size):
                 comm.Bcast([bucket[i], MPI.FLOAT], root=0)
-                
-                

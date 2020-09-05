@@ -40,7 +40,7 @@ if __name__ == "__main__":
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
-    start = time.time()
+    start = time.clock()
     worker = SyncWorker(batch_size)
 
     # Send parameters to parameter server
@@ -69,6 +69,6 @@ if __name__ == "__main__":
             if batch_cnt % 10 == 0:
                 print("Worker{} epoch: {} batch: {} accuracy: {}".format(rank,step,batch_cnt,worker.sess.run(worker.accuracy, feed_dict={worker.x: worker.x_test, worker.y_: worker.y_test, worker.keep_prob: 1.0})))
     
-    end = time.time()
+    end = time.clock()
     print("Worker{} final accuracy: {}".format(rank,worker.sess.run(worker.accuracy, feed_dict={worker.x: worker.x_test, worker.y_: worker.y_test, worker.keep_prob: 1.0})))
     print("Time: {}".format(end-start))

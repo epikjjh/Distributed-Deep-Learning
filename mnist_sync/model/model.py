@@ -1,5 +1,5 @@
 import tensorflow as tf
-import pickle, gzip, urllib.request
+import pickle
 import numpy as np
 import pandas as pd
 
@@ -8,7 +8,7 @@ class Model:
         # Data: mnist dataset
         with open('data/mnist.pkl', 'rb') as f:
             train_set, _, test_set = pickle.load(f, encoding='latin1')
-        
+
         self.x_train, y_train = train_set
         self.x_test, y_test = test_set
 
@@ -23,7 +23,7 @@ class Model:
 
             '''First Conv layer'''
             # shape: [5,5,1,32]
-            self.w_conv1 = tf.compat.v1.get_variable("v0", shape=[5,5,1,32], dtype=tf.float32) 
+            self.w_conv1 = tf.compat.v1.get_variable("v0", shape=[5,5,1,32], dtype=tf.float32)
             # shape: [32]
             self.b_conv1 = tf.compat.v1.get_variable("v1", shape=[32], dtype=tf.float32)
             # conv layer
@@ -33,9 +33,9 @@ class Model:
             self.h_pool1 = tf.nn.max_pool2d(self.h_conv1, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
 
             '''Second Conv layer'''
-            # shape: [5,5,32,64] 
+            # shape: [5,5,32,64]
             self.w_conv2 = tf.compat.v1.get_variable("v2", shape=[5,5,32,64], dtype=tf.float32)
-            # shape: [64] 
+            # shape: [64]
             self.b_conv2 = tf.compat.v1.get_variable("v3", shape=[64], dtype=tf.float32)
             # conv layer
             self.conv2 = tf.nn.conv2d(self.h_pool1, self.w_conv2, strides=[1,1,1,1], padding='SAME')
