@@ -10,13 +10,8 @@ class ParameterServer:
         self.total_batch = params["total_batch"]
 
         # Data for worker
-        # For worker1
-        self.w1_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.var_size)]
-
-        # For worker2
-        self.w2_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.var_size)]
-
-        # For worker1 + worker2 
+        self.big_bucket = [np.empty(self.var_shape[i%self.var_size], dtype=np.float32) for i in range(self.var_size*num_workers)]
+        # For worker1 + worker2
         self.w_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.var_size)]
         self.ph_bucket = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.var_size)]
     
@@ -38,9 +33,10 @@ class ParameterServer:
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
     def update(self):
+        for i in range(self.var_size*num_workers):
+            self.big_bucket[i%self.var_size] += self.big_bucket[i]
         for i in range(self.var_size):
-            self.w_bucket[i] = self.w1_bucket[i] + self.w2_bucket[i]
-
+            self.w_bucket[i] = self.big_bucket[i]
         self.sess.run(self.sync_gradients, feed_dict={self.ph_bucket[i]:self.w_bucket[i] for i in range(self.var_size)})
 
 
@@ -48,10 +44,10 @@ if __name__ == "__main__":
     epoch = 1
     batch_size = 100
     comm = MPI.COMM_WORLD
-
+    argv = comm.recv(source=1, tag=0)
+    num_workers = int(argv)
     # Receive parameters from worker
     params = comm.recv(source=1, tag=0)
-
     ps = ParameterServer(params)
     # For broadcasting 
     bucket = [np.empty(ps.var_shape[i], dtype=np.float32) for i in range(ps.var_size)]
@@ -60,14 +56,10 @@ if __name__ == "__main__":
         batch_num = int(ps.total_batch/batch_size)
         for batch_cnt in range(batch_num):
             # Receive data from workers
-            # From worker1
-            for i in range(ps.var_size):
-                comm.Recv([ps.w1_bucket[i], MPI.FLOAT], source=1, tag=i+1)
-
-            # From worker2
-            for i in range(ps.var_size):
-                comm.Recv([ps.w2_bucket[i], MPI.FLOAT], source=2, tag=i+1)
-
+            # From workers
+            for i in range(num_workers):
+                for j in range(ps.var_size):
+                    comm.Recv([ps.big_bucket[(i*ps.var_size)+j], MPI.FLOAT], source=i+1, tag=j+1)
             # Synchronize
             ps.update()
 

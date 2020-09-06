@@ -39,13 +39,14 @@ if __name__ == "__main__":
     batch_size = 100
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-
+    argv = sys.argv[2]
     start = time.clock()
     worker = SyncWorker(batch_size) 
 
     # Send parameters to parameter server
     if rank == 1:
         data = {"size": worker.var_size, "shape": worker.var_shape, "total_batch": worker.x_train.shape[0]}
+        comm.send(argv, dest=0, tag=0)
         comm.send(data, dest=0, tag=0)
 
     # For broadcasting 
