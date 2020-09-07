@@ -9,17 +9,24 @@ class SyncWorker(Model):
     def __init__(self, batch_size):
         super().__init__()
         self.batch_size = batch_size
+        self.split_func = self.wrap_split() 
         self.send_func = self.wrap_send() 
-        self.sender = tf.py_function(func=self.send_func, inp=self.grads, Tout=[])
+        self.splitter = tf.py_function(func=self.split_func, inp=self.grads, Tout=[tf.float32 for i in range(self.var_size)])
+        self.sender = tf.py_function(func=self.send_func, inp=self.splitter, Tout=[])
 
-    def wrap_send(self):
+    def wrap_split(self):
         # Get multiple arguments
-        def send(*grads_and_vars):
+        def split(*grads_and_vars):
             # grads_and_vars -> ((gw, w), (gb, b))
             # Tuple: (gradient, variable)
             # Pack gradeint values 
             grads = [grad for grad, var in grads_and_vars]
+            return grads
 
+        return split
+
+    def wrap_send(self):
+        def send(*grads):
             # Send data to parameter server
             for i in range(self.var_size):
                 comm.Send([grads[i], MPI.FLOAT], dest=0, tag=i+1)
