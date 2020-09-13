@@ -22,7 +22,7 @@ class ParameterServer:
 
         # Apply gradients
         # Tuple: (gradient, variable)
-        # Pack gradeint values 
+        # Pack gradeint values
         self.grads_and_vars = [(self.ph_bucket[i], self.var_bucket[i]) for i in range(self.var_size)]
         self.sync_gradients = self.optimizer.apply_gradients(self.grads_and_vars)
             
@@ -45,11 +45,11 @@ if __name__ == "__main__":
     params = comm.recv(source=1, tag=0)
 
     ps = ParameterServer(params)
-    # For broadcasting 
+    # For broadcasting
     bucket = [np.empty(ps.var_shape[i], dtype=np.float32) for i in range(ps.var_size)]
 
     for step in range(epoch):
-        # Batch iteration number: batch count * number of worker    
+        # Batch iteration number: batch count * number of worker
         batch_num = int(ps.total_batch/batch_size)*worker_num
         for batch_cnt in range(batch_num):
             # Receive data from worker
@@ -65,4 +65,4 @@ if __name__ == "__main__":
 
             # send to worker
             for i in range(ps.var_size):
-                comm.Send([bucket[i], MPI.FLOAT], dest=info.Get_source(), tag=i+1) 
+                comm.Send([bucket[i], MPI.FLOAT], dest=info.Get_source(), tag=i+1)

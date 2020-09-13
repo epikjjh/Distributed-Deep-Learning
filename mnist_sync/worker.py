@@ -10,20 +10,7 @@ class SyncWorker(Model):
         super().__init__()
         self.batch_size = batch_size
         self.grad_buckets = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.var_size)]
-        self.split_func = self.wrap_split() 
-        self.splitter = tf.py_function(func=self.split_func, inp=self.grads, Tout=[tf.float32 for i in range(self.var_size)])
         self.senders = [tf.py_function(func=self.wrap_send(i+1), inp=[self.grad_buckets[i]], Tout=[]) for i in range(self.var_size)]
-
-    def wrap_split(self):
-        # Get multiple arguments
-        def split(*grads_and_vars):
-            # grads_and_vars -> ((gw, w), (gb, b))
-            # Tuple: (gradient, variable)
-            # Pack gradeint values 
-            grads = [grad for grad, var in grads_and_vars]
-            return grads
-
-        return split
 
     def wrap_send(self, tag):
         def send(grad):
@@ -37,7 +24,9 @@ class SyncWorker(Model):
     def work(self, cnt):
         x_batch = self.x_train[self.batch_size*cnt:self.batch_size*(cnt+1)]
         y_batch = self.y_train[self.batch_size*cnt:self.batch_size*(cnt+1)]
-        grads, = self.sess.run([self.splitter], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
+        ret, = self.sess.run([self.grads], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
+        grads = [grad for grad, var in ret] # gradient tuple
+        
         for i in range(self.var_size):
             self.sess.run([self.senders[i]], feed_dict={self.grad_buckets[i]: grads[i]})
 
@@ -48,17 +37,15 @@ if __name__ == "__main__":
     batch_size = 100
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    argv = sys.argv[2]
     start = time.clock()
-    worker = SyncWorker(batch_size) 
+    worker = SyncWorker(batch_size)
 
     # Send parameters to parameter server
     if rank == 1:
         data = {"size": worker.var_size, "shape": worker.var_shape, "total_batch": worker.x_train.shape[0]}
-        comm.send(argv, dest=0, tag=0)
         comm.send(data, dest=0, tag=0)
 
-    # For broadcasting 
+    # For broadcasting
     bucket = [np.empty(worker.var_shape[i], dtype=np.float32) for i in range(worker.var_size)]
     ph_bucket = [tf.compat.v1.placeholder(shape=worker.var_shape[i], dtype=tf.float32) for i in range(worker.var_size)]
 
@@ -72,7 +59,7 @@ if __name__ == "__main__":
 
             # Receive data from parameter server
             for i in range(worker.var_size):
-                comm.Bcast([bucket[i], MPI.FLOAT], root=0) 
+                comm.Bcast([bucket[i], MPI.FLOAT], root=0)
 
             # Assign broadcasted values
             worker.sess.run(bucket_assign, feed_dict={ph_bucket[i]:bucket[i] for i in range(worker.var_size)})
