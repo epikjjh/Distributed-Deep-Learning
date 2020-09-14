@@ -21,21 +21,8 @@ class SyncWorker(Model):
 
         self.batch_size = batch_size
         self.grad_buckets = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.var_size)]
-        self.split_func = self.wrap_split() 
-        self.splitter = tf.py_function(func=self.split_func, inp=self.grads, Tout=[tf.float32 for i in range(self.var_size)])
         self.senders = [tf.py_function(func=self.wrap_send(i), inp=[self.grad_buckets[i]], Tout=[]) for i in range(self.var_size)]
-
-    def wrap_split(self):
-        # Get multiple arguments
-        def split(*grads_and_vars):
-            # grads_and_vars -> ((gw, w), (gb, b))
-            # Tuple: (gradient, variable)
-            # Pack gradeint values 
-            grads = [grad for grad, var in grads_and_vars]
-            return grads
-
-        return split
-
+    
     def wrap_send(self, num):
         def send(grad):
             # Send data to parameter server
@@ -51,7 +38,9 @@ class SyncWorker(Model):
     def work(self, cnt):
         x_batch = self.x_train[self.batch_size*cnt:self.batch_size*(cnt+1)]
         y_batch = self.y_train[self.batch_size*cnt:self.batch_size*(cnt+1)]
-        grads, = self.sess.run([self.splitter], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
+        ret, = self.sess.run([self.grads], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
+        grads = [grad for grad, var in ret] # gradient tuple
+        
         for i in range(self.var_size):
             self.sess.run([self.senders[i]], feed_dict={self.grad_buckets[i]: grads[i]})
 
@@ -70,7 +59,7 @@ if __name__ == "__main__":
     num_ps = comm.Get_size() - num_workers
 
     start = time.clock()
-    worker = SyncWorker(batch_size, rank, num_ps, num_workers) 
+    worker = SyncWorker(batch_size, rank, num_ps, num_workers)
 
     # Send parameters to parameter server
     if worker.rank == worker.num_ps:
@@ -78,7 +67,7 @@ if __name__ == "__main__":
         for i in range(worker.num_ps):
             comm.send(data, dest=i, tag=0)
 
-    # For broadcasting 
+    # For broadcasting
     bucket = [np.empty(worker.var_shape[i], dtype=np.float32) for i in range(worker.var_size)]
     ph_bucket = [tf.compat.v1.placeholder(shape=worker.var_shape[i], dtype=tf.float32) for i in range(worker.var_size)]
 
@@ -96,7 +85,7 @@ if __name__ == "__main__":
                 ind = i // worker.avg_var_size
                 if i >= worker.var_size - worker.local_var_size:
                     ind = worker.num_ps-1
-                comm.Recv([bucket[i], MPI.FLOAT], source=ind, tag=i-(ind*worker.avg_var_size)) 
+                comm.Recv([bucket[i], MPI.FLOAT], source=ind, tag=i-(ind*worker.avg_var_size))
                 
             # Assign broadcasted values
             worker.sess.run(bucket_assign, feed_dict={ph_bucket[i]:bucket[i] for i in range(worker.var_size)})

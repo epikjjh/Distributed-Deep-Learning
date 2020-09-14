@@ -16,7 +16,7 @@ class ParameterServer:
         '''
             Parameter length:
                 Incase of last parameter server:
-                    Total length of parameters // number of parameter servers + Total length of parameters % number of parameter servers 
+                    Total length of parameters // number of parameter servers + Total length of parameters % number of parameter servers
 
                 else:
                     Total length of parameters // number of parameter servers
@@ -35,7 +35,7 @@ class ParameterServer:
         self.total_batch = params["total_batch"]
 
         # For applying gradients
-        if rank != num_ps-1:     
+        if rank != num_ps-1:
             self.w_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.local_var_size*rank, self.local_var_size*(rank+1))]
             self.ph_bucket = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.local_var_size*rank, self.local_var_size*(rank+1))]
         else:
@@ -54,7 +54,7 @@ class ParameterServer:
 
         # Apply gradients
         # Tuple: (gradient, variable)
-        # Pack gradeint values 
+        # Pack gradeint values
         self.grads_and_vars = [(self.ph_bucket[i], self.var_bucket[i]) for i in range(self.local_var_size)]
         self.sync_gradients = self.optimizer.apply_gradients(self.grads_and_vars)
             
@@ -84,14 +84,14 @@ if __name__ == "__main__":
     params = comm.recv(source=num_ps, tag=0)
     ps = ParameterServer(params, rank, num_ps, num_workers)
 
-    # For sending 
-    if rank != num_ps-1:     
+    # For sending
+    if rank != num_ps-1:
         bucket = [np.empty(ps.var_shape[i], dtype=np.float32) for i in range(ps.local_var_size*ps.rank, ps.local_var_size*(ps.rank+1))]
     else:
         bucket = [np.empty(ps.var_shape[i], dtype=np.float32) for i in range(ps.total_var_size-ps.local_var_size, ps.total_var_size)]
 
     for step in range(epoch):
-        # Batch iteration number: batch count * number of worker    
+        # Batch iteration number: batch count * number of worker
         batch_num = int(ps.total_batch/batch_size)*num_workers
         for batch_cnt in range(batch_num):
             # Receive data from worker
@@ -107,4 +107,4 @@ if __name__ == "__main__":
 
             # send to worker
             for i in range(ps.local_var_size):
-                comm.Send([bucket[i], MPI.FLOAT], dest=info.Get_source(), tag=i) 
+                comm.Send([bucket[i], MPI.FLOAT], dest=info.Get_source(), tag=i)
