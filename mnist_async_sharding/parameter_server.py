@@ -37,7 +37,7 @@ class ParameterServer:
         # For applying gradients
         if rank != num_ps-1:
             self.w_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.local_var_size * rank, self.local_var_size * (rank+1))]
-            self.ph_bucket = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32). for i in range(self.local_var_size * rank, self.local_var_size * (rank+1))]
+            self.ph_bucket = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.local_var_size * rank, self.local_var_size * (rank+1))]
         else:
             self.w_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.total_var_size - self.local_var_size, self.total_var_size)]
             self.ph_bucket = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.total_var_size - self.local_var_size, self.total_var_size)]
