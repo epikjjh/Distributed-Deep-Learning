@@ -30,7 +30,9 @@ class ParameterServer:
         self.sess = tf.compat.v1.Session()
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
+    # Synchronize
     def update(self):
+        # Sum up the gradient of all worker by layer
         for i in range(self.var_size*num_workers):
             self.big_bucket[i%self.var_size] += self.big_bucket[i]
         self.sess.run(self.sync_gradients, feed_dict={self.ph_bucket[i]:self.big_bucket[i] for i in range(self.var_size)})
@@ -58,10 +60,10 @@ if __name__ == "__main__":
             # Synchronize
             ps.update()
 
-            # Broadcast values
+            # Prepare sending values
             for i in range(ps.var_size):
                 bucket[i] = ps.var_bucket[i].eval(session=ps.sess)
 
-            # send to worker 1, 2
+            # send to workers
             for i in range(ps.var_size):
                 comm.Bcast([bucket[i], MPI.FLOAT], root=0)

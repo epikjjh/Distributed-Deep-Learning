@@ -22,7 +22,7 @@ class ParameterServer:
 
         # Apply gradients
         # Tuple: (gradient, variable)
-        # Pack gradeint values
+        # Pack gradient values
         self.grads_and_vars = [(self.ph_bucket[i], self.var_bucket[i]) for i in range(self.var_size)]
         self.sync_gradients = self.optimizer.apply_gradients(self.grads_and_vars)
             
@@ -30,6 +30,7 @@ class ParameterServer:
         self.sess = tf.compat.v1.Session()
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
+    # Synchronize
     def update(self):
         self.sess.run(self.sync_gradients, feed_dict={self.ph_bucket[i]:self.w_bucket[i] for i in range(self.var_size)})
 

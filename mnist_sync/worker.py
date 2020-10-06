@@ -9,23 +9,28 @@ class SyncWorker(Model):
     def __init__(self, batch_size):
         super().__init__()
         self.batch_size = batch_size
+        
+        # MPI.Send input bucket
         self.grad_buckets = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.var_size)]
+        
+        # MPI.Send tensor
         self.senders = [tf.py_function(func=self.wrap_send(i+1), inp=[self.grad_buckets[i]], Tout=[]) for i in range(self.var_size)]
 
     def wrap_send(self, tag):
         def send(grad):
             # Send data to parameter server
             comm.Send([grad, MPI.FLOAT], dest=0, tag=tag)
-
             return None
-
         return send
 
     def work(self, cnt):
         x_batch = self.x_train[self.batch_size*cnt:self.batch_size*(cnt+1)]
         y_batch = self.y_train[self.batch_size*cnt:self.batch_size*(cnt+1)]
+        # compute gradients
         ret, = self.sess.run([self.grads], feed_dict={self.x: x_batch, self.y_: y_batch, self.keep_prob: 0.5})
-        grads = [grad for grad, var in ret] # gradient tuple
+        
+        # gradient tuple
+        grads = [grad for grad, var in ret]
         
         for i in range(self.var_size):
             self.sess.run([self.senders[i]], feed_dict={self.grad_buckets[i]: grads[i]})
@@ -48,7 +53,6 @@ if __name__ == "__main__":
     # For broadcasting
     bucket = [np.empty(worker.var_shape[i], dtype=np.float32) for i in range(worker.var_size)]
     ph_bucket = [tf.compat.v1.placeholder(shape=worker.var_shape[i], dtype=tf.float32) for i in range(worker.var_size)]
-
     bucket_assign = [tf.compat.v1.assign(worker.var_bucket[i], ph_bucket[i]) for i in range(worker.var_size)]
 
     for step in range(epoch):
@@ -63,6 +67,7 @@ if __name__ == "__main__":
 
             # Assign broadcasted values
             worker.sess.run(bucket_assign, feed_dict={ph_bucket[i]:bucket[i] for i in range(worker.var_size)})
+            
             if batch_cnt % 10 == 0:
                 print("Worker{} epoch: {} batch: {} accuracy: {}".format(rank,step,batch_cnt,worker.sess.run(worker.accuracy, feed_dict={worker.x: worker.x_test, worker.y_: worker.y_test, worker.keep_prob: 1.0})))
     
