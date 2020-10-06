@@ -71,9 +71,10 @@ class ParameterServer:
         # Create session
         self.sess = tf.compat.v1.Session()
         self.sess.run(tf.compat.v1.global_variables_initializer())
-
+    
+    # Synchronize
     def update(self):
-        # Sum up data
+        # Sum up the gradient of all worker by layer
         for i in range(1,self.num_workers):
             for j in range(self.local_var_size):
                 self.big_bucket[0][j] += self.big_bucket[i][j]

@@ -6,7 +6,7 @@ import time,sys
 class ParameterServer:
     def __init__(self, params, rank, num_ps, num_workers):
         # Set rank of parameter server
-        # rank: 0 ~ number of parameter servers-1
+        # rank: 0 ~ the number of parameter servers -1
         self.rank = rank
         
         # Set number of parameter servers & workers
@@ -36,18 +36,18 @@ class ParameterServer:
 
         # For applying gradients
         if rank != num_ps-1:
-            self.w_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.local_var_size*rank, self.local_var_size*(rank+1))]
-            self.ph_bucket = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.local_var_size*rank, self.local_var_size*(rank+1))]
+            self.w_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.local_var_size * rank, self.local_var_size * (rank+1))]
+            self.ph_bucket = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32). for i in range(self.local_var_size * rank, self.local_var_size * (rank+1))]
         else:
-            self.w_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.total_var_size-self.local_var_size, self.total_var_size)]
-            self.ph_bucket = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.total_var_size-self.local_var_size, self.total_var_size)]
+            self.w_bucket = [np.empty(self.var_shape[i], dtype=np.float32) for i in range(self.total_var_size - self.local_var_size, self.total_var_size)]
+            self.ph_bucket = [tf.compat.v1.placeholder(shape=self.var_shape[i], dtype=tf.float32) for i in range(self.total_var_size - self.local_var_size, self.total_var_size)]
     
         # TF variables
         with tf.compat.v1.variable_scope("ParameterServer", reuse=tf.compat.v1.AUTO_REUSE):
             if rank != num_ps-1:
-                self.var_bucket = [tf.compat.v1.get_variable("v{}".format(i), shape=self.var_shape[i], dtype=tf.float32) for i in range(self.local_var_size*rank, self.local_var_size*(rank+1))]
+                self.var_bucket = [tf.compat.v1.get_variable("v{}".format(i), shape=self.var_shape[i], dtype=tf.float32) for i in range(self.local_var_size * rank, self.local_var_size * (rank+1))]
             else:
-                self.var_bucket = [tf.compat.v1.get_variable("v{}".format(i), shape=self.var_shape[i], dtype=tf.float32) for i in range(self.total_var_size-self.local_var_size, self.total_var_size)]
+                self.var_bucket = [tf.compat.v1.get_variable("v{}".format(i), shape=self.var_shape[i], dtype=tf.float32) for i in range(self.total_var_size - self.local_var_size, self.total_var_size)]
 
         # Optimizer
         self.optimizer = tf.compat.v1.train.AdamOptimizer(1e-4)
@@ -62,6 +62,7 @@ class ParameterServer:
         self.sess = tf.compat.v1.Session()
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
+    # Synchronize
     def update(self):
         self.sess.run(self.sync_gradients, feed_dict={self.ph_bucket[i]:self.w_bucket[i] for i in range(self.local_var_size)})
 
