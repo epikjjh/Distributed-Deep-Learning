@@ -41,20 +41,50 @@ class Model:
             self.h_conv2 = tf.nn.relu(self.conv2 + self.b_conv2)
             self.h_pool2 = tf.nn.max_pool2d(self.h_conv2, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
             
-            '''FC layer'''
-            self.w_fc1 = tf.compat.v1.get_variable("v4", shape=[7*7*64, 1024], dtype=tf.float32)
-            self.b_fc1 = tf.compat.v1.get_variable("v5", shape=[1024], dtype=tf.float32)
-            self.h_pool2_flat = tf.reshape(self.h_pool2, [-1, 7*7*64])
-            self.h_fc1 = tf.nn.relu(tf.matmul(self.h_pool2_flat, self.w_fc1) + self.b_fc1)
+            '''Third Conv layer'''
+            # shape: [5,5,64,128] 
+            self.w_conv3 = tf.compat.v1.get_variable("v4", shape=[5,5,64,128], dtype=tf.float32)
+            # shape: [128] 
+            self.b_conv3 = tf.compat.v1.get_variable("v5", shape=[128], dtype=tf.float32)
+            # conv layer
+            self.conv3 = tf.nn.conv2d(self.h_pool2, self.w_conv3, strides=[1,1,1,1], padding='SAME')
+            # activation layer
+            self.h_conv3 = tf.nn.relu(self.conv3 + self.b_conv3)
+            self.h_pool3 = tf.nn.max_pool2d(self.h_conv3, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+            
+            '''Forth Conv layer'''
+            # shape: [5,5,128,256] 
+            self.w_conv4 = tf.compat.v1.get_variable("v6", shape=[5,5,128,256], dtype=tf.float32)
+            # shape: [256] 
+            self.b_conv4 = tf.compat.v1.get_variable("v7", shape=[256], dtype=tf.float32)
+            # conv layer
+            self.conv4 = tf.nn.conv2d(self.h_pool3, self.w_conv4, strides=[1,1,1,1], padding='SAME')
+            # activation layer
+            self.h_conv4 = tf.nn.relu(self.conv4 + self.b_conv4)
+            self.h_pool4 = tf.nn.max_pool2d(self.h_conv4, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+            
+            '''FC layer1'''
+            self.w_fc1 = tf.compat.v1.get_variable("v8", shape=[2*2*256, 1024], dtype=tf.float32)
+            self.b_fc1 = tf.compat.v1.get_variable("v9", shape=[1024], dtype=tf.float32)
+            self.h_pool4_flat = tf.reshape(self.h_pool4, [-1, 2*2*256])
+            self.h_fc1 = tf.nn.relu(tf.matmul(self.h_pool4_flat, self.w_fc1) + self.b_fc1)
 
             '''Dropout'''
             self.keep_prob = tf.compat.v1.placeholder(tf.float32)
             self.h_fc1_drop = tf.nn.dropout(self.h_fc1, rate=1.0-self.keep_prob)
 
+            '''FC layer2'''
+            self.w_fc2 = tf.compat.v1.get_variable("v10", shape=[1024, 512], dtype=tf.float32)
+            self.b_fc2 = tf.compat.v1.get_variable("v11", shape=[512], dtype=tf.float32)
+            self.h_fc2 = tf.matmul(self.h_fc1_drop, self.w_fc2) + self.b_fc2
+
+            '''Dropout'''
+            self.h_fc2_drop = tf.nn.dropout(self.h_fc2, rate=1.0-self.keep_prob)
+
             '''Softmax layer'''
-            self.w_fc2 = tf.compat.v1.get_variable("v6", shape=[1024, 10], dtype=tf.float32)
-            self.b_fc2 = tf.compat.v1.get_variable("v7", shape=[10], dtype=tf.float32)
-            self.logits = tf.matmul(self.h_fc1_drop, self.w_fc2) + self.b_fc2
+            self.w_fc3 = tf.compat.v1.get_variable("v12", shape=[512, 10], dtype=tf.float32)
+            self.b_fc3 = tf.compat.v1.get_variable("v13", shape=[10], dtype=tf.float32)
+            self.logits = tf.matmul(self.h_fc2_drop, self.w_fc3) + self.b_fc3
             self.y = tf.nn.softmax(self.logits)
 
             '''Cost function & optimizer'''
@@ -80,3 +110,4 @@ class Model:
 
             # Initialize variables
             self.sess.run(tf.compat.v1.global_variables_initializer())
+
